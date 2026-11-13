@@ -32,3 +32,11 @@ Kesimpulan temuan (a)–(d):
 - (d) Kalibrasi conformal lebar band: gagal dua bentuk (per-market +0.0010; global +0.0048). Lebar optimal pada 4h lalu tidak berpindah ke 4h berikut (regim berubah).
 
 Versi terbaik: **b2 — 0.276910** (v2 + winsorize ±0.10 + kecil ×0.7 + besar ×1.15). Target <0.268 dan <0.250 TIDAK tercapai. Berhenti setelah 4 iterasi berturut-turut tidak membaik (c1, c2, d1, d2).
+
+## Review final (2026-11-13 ~21:00 WIB, atas permintaan Zayyid: jangan submit; b2 tetap checkpoint)
+- Ditemukan dan diperbaiki dulu: prototipe Python ronde 27 ternyata TIDAK sama dengan b2 (sumrev 0.9, tanpa winsorize) — hasilnya tidak bisa dipakai. Dibangun `mirror_b2.py` yang mereproduksi b2 PERSIS (0.276910, per-case identik). Semua uji review memakai mirror ini.
+- Inspeksi `main.ts`: tidak ada bug besar (format, determinisme, runtime ~0.35 dtk/case, ukuran OK). Catatan kecil: stride 7 sedikit mengabaikan jendela paling akhir; kode mati `SHORT_K = 1.0`.
+- Analisis leaderboard: top 50 punya median error 0.70–0.75 (saya 0.7537) dan coverage 0.78–0.92 (saya 0.826). Rank 4 mencapai 0.246 dengan median error 0.7527 (sama buruknya dengan saya) — jadi band yang lebih baik saja sudah cukup ke 0.246; tapi semua cara memperbaiki band/median yang saya coba gagal atau merusak case lain.
+- Ronde review 1 (basis mirror benar): bounce phased 0.2 lk60 → 0.274261 tapi p02 +0.011; bounce phased 0.1 lk60 → 0.274963 (gain 0.0019, tanpa case memburuk tajam) — TIDAK diadopsi: gain tidak bermakna dan ini ide yang dulu sudah gagal. Anchor thr0.05 → mean membaik sedikit tapi backtest volatil memburuk — ditolak. Vol-regime k0.5 → mean 0.2728 tapi p00 memburuk tajam +0.022 — DITOLAK (aturan: jangan korbankan satu case demi rata-rata).
+- Ronde review 2: sumrev 0.9 → 0.278259 (lebih buruk), sumrev 0.5 → 0.277732 (lebih buruk) — 0.7 terkonfirmasi optimal. Stride fix → 0.276895 (no-op). Time-of-day vol scale → 0.283771 (lebih buruk jelas).
+- KESIMPULAN: tidak ada perbaikan bermakna. Berhenti bereksperimen. b2 (0.276910) tetap versi terbaik. Tidak ada repo GitHub, tidak ada submit.
