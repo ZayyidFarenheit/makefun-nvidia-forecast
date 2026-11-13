@@ -48,6 +48,8 @@ const SMALL_THR = 0.02; // iter b1: markets with last price below this are "smal
 const SMALL_K = 0.7; // iter b1: small markets' offsets x0.7 (pulled harder to last price)
 const LARGE_THR = 0.05; // iter b2: markets with last price at/above this are "large"
 const LARGE_K = 1.15; // iter b2: large markets' offsets x1.15 (looser)
+const SHORT_HIST_MIN = 720; // iter c1: markets with fewer minutes of history are "short"
+const SHORT_K = 1.0; // iter c1/c2 ditolak — off
 
 function q6(v: number): number {
   const c = Math.min(1, Math.max(0, v));
@@ -159,6 +161,12 @@ function forecastMarket(prices: number[]): number[][] {
   } else if (x >= LARGE_THR) {
     for (let h = 0; h < HORIZON; h++) {
       for (let j = 0; j < 5; j++) o[h][j] *= LARGE_K;
+    }
+  }
+  // (c) short-history markets: wider bands (estimation uncertainty)
+  if (prices.length < SHORT_HIST_MIN) {
+    for (let h = 0; h < HORIZON; h++) {
+      for (let j = 0; j < 5; j++) o[h][j] *= SHORT_K;
     }
   }
   return o;
