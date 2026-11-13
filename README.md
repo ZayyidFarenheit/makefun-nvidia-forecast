@@ -52,7 +52,7 @@ cases + 6 volatile launch-day cases) and the layers stack:
 | House baseline | 0.363589 | 2.060 | 0.7675 | 0.9496 |
 | **b2 (fallback, `main.ts`)** | **0.276910** | 2.358 | 0.7537 | 0.8258 |
 | **S2a (candidate, `main-s2a.ts`)** | **0.257627** | **2.254** | 0.7534 | 0.8665 |
-| **S2a+h30 (candidate, `main-s2a-h30.ts`)** | **0.256439** | **2.222** | 0.7474 | 0.8705 |
+| **S2a+h30 (submitted entry, `main.ts`)** | **0.256439** | **2.222** | 0.7474 | 0.8705 |
 
 S2a per-case: p00 0.3985, p01 0.2956, p02 0.3633, p03 0.2441,
 p04 0.1991, p05 0.1039. It improves every practice case vs b2 except
