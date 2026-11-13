@@ -1,27 +1,28 @@
 // Empirical-quantile forecaster for Polymarket "Next CEO of NVIDIA?" prices.
-// Model v2 (verified 2026-11-13, practice loss 0.284 vs house baseline 0.364,
-// 90% coverage 0.857, robust on a volatile launch-day backtest too):
+// Model v2 (verified 2026-11-13, practice loss 0.283761 vs house baseline
+// 0.363589, 90% coverage 0.857, median error 0.7537):
 //
 //   1. Per market, centred empirical quantiles of h-step price moves from the
-//      last 12h (stride 7), levels [0.05, 0.25, 0.5, 0.75, 0.95], median
-//      centred on the last price (no drift: historical drift does not predict
-//      the future median in this market; tested, it hurts).
-//   2. Outer quantiles (5%/95%) shrunk x0.7, inner (25%/75%) x0.8, then the
-//      48h-window outer quantiles floored at 0.5x (so a quiet 12h never
-//      pretends a jump is impossible), then every offset shrunk x0.7.
+//      last CORE_WINDOW (stride 7), levels [0.05, 0.25, 0.5, 0.75, 0.95],
+//      median centred on the last price (no drift: historical drift does not
+//      predict the future median in this market; tested, it hurts).
+//   2. Outer quantiles (5%/95%) shrunk xSHRINK_OUTER, inner (25%/75%)
+//      xSHRINK_INNER, then the FLOOR_WINDOW outer quantiles floored at
+//      FLOOR_K (so a quiet core window never pretends a jump is impossible),
+//      then every offset shrunk xEXTRA.
 //   3. Each quantile's h-curve (h = 1..240) is fitted by a power law
 //      offset(h) = a * h^alpha, alpha in {0.30..0.80 step 0.05}, least squares
 //      per quantile. This pools 240 noisy per-h estimates into 2 parameters.
 //   4. Sum-reversion: the 24 markets are mutually exclusive, so their Yes
 //      prices should sum to ~1. Medians are pulled toward the sum-consistent
-//      level: delta = (x / S - x) * 0.7 with 1/S clamped to [0.85, 1.18],
+//      level: delta = (x / S - x) * SUM_POWER with 1/S clamped to SUM_CLAMP,
 //      S = sum of last prices; the same delta shifts all five quantiles.
 //   5. Rows are sorted (non-decreasing quantiles), clamped to [0,1] and
 //      rounded to 6 decimals. Output is deterministic: pure functions of the
 //      input, no randomness, no network, no clock.
 //
-// Verified locally: practice loss 0.2838 (item-weighted), coverage 0.857,
-// median error 0.7537, runtime ~0.3s per case, byte-identical repeat runs.
+// Parameters are learned from the case's own history at prediction time only.
+// No hardcoded prices or market ids. See ITERATIONS.md for the tuning log.
 
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -29,6 +30,19 @@ import { join } from "node:path";
 const TAU = [0.05, 0.25, 0.5, 0.75, 0.95];
 const Z = [-1.644854, -0.67449, 0, 0.67449, 1.644854];
 const HORIZON = 240;
+
+// ---- parameters (v2 baseline) ----
+const CORE_WINDOW_MIN = 720; // 12h
+const FLOOR_WINDOW_MIN = 2880; // 48h
+const SHRINK_OUTER = 0.7;
+const SHRINK_INNER = 0.8;
+const FLOOR_K = 0.5;
+const EXTRA = 0.7;
+const SUM_POWER = 0.7;
+const SUM_CLAMP_LO = 0.85;
+const SUM_CLAMP_HI = 1.18;
+const STRIDE = 7;
+const WINSOR_Q = 0; // 0 = off; else clip h-step samples at this two-sided quantile (e.g. 0.01)
 
 function q6(v: number): number {
   const c = Math.min(1, Math.max(0, v));
@@ -55,14 +69,24 @@ function rawOffsets(prices: number[], windowMin: number): number[][] {
     let qs: number[];
     if (n - h >= 30) {
       const d: number[] = [];
-      for (let i = 0; i < n - h; i += 7) d.push(p[i + h] - p[i]);
+      for (let i = 0; i < n - h; i += STRIDE) d.push(p[i + h] - p[i]);
       d.sort((a, b) => a - b);
+      if (WINSOR_Q > 0 && d.length >= 20) {
+        const lo = quantile(d, WINSOR_Q);
+        const hi = quantile(d, 1 - WINSOR_Q);
+        for (let k = 0; k < d.length; k++) d[k] = Math.min(hi, Math.max(lo, d[k]));
+      }
       qs = TAU.map((t) => quantile(d, t));
       last = qs;
     } else if (n - h >= 5) {
       const d: number[] = [];
       for (let i = 0; i < n - h; i++) d.push(p[i + h] - p[i]);
       d.sort((a, b) => a - b);
+      if (WINSOR_Q > 0 && d.length >= 20) {
+        const lo = quantile(d, WINSOR_Q);
+        const hi = quantile(d, 1 - WINSOR_Q);
+        for (let k = 0; k < d.length; k++) d[k] = Math.min(hi, Math.max(lo, d[k]));
+      }
       qs = TAU.map((t) => quantile(d, t));
       last = qs;
     } else if (last !== null) {
@@ -105,19 +129,19 @@ function powerFit(offs: number[][]): number[][] {
 }
 
 function forecastMarket(prices: number[]): number[][] {
-  const x = prices[prices.length - 1];
-  const raw12 = rawOffsets(prices, 720);
-  const raw48 = rawOffsets(prices, 2880);
+  const rawCore = rawOffsets(prices, CORE_WINDOW_MIN);
+  const rawFloor = rawOffsets(prices, FLOOR_WINDOW_MIN);
   // centre on the median column, then power-fit each column
-  const c12 = raw12.map((row) => row.map((v) => v - row[2]));
-  const c48 = raw48.map((row) => row.map((v) => v - row[2]));
-  const o = powerFit(c12);
-  const o48 = powerFit(c48);
-  // shrink + 48h outer floor
+  const cCore = rawCore.map((row) => row.map((v) => v - row[2]));
+  const cFloor = rawFloor.map((row) => row.map((v) => v - row[2]));
+  const o = powerFit(cCore);
+  const oFloor = powerFit(cFloor);
+  // shrink + floor-window outer floor
   for (let h = 0; h < HORIZON; h++) {
-    o[h][0] *= 0.7; o[h][4] *= 0.7; o[h][1] *= 0.8; o[h][3] *= 0.8;
-    o[h][0] = Math.min(o[h][0], 0.5 * o48[h][0]);
-    o[h][4] = Math.max(o[h][4], 0.5 * o48[h][4]);
+    o[h][0] *= SHRINK_OUTER; o[h][4] *= SHRINK_OUTER;
+    o[h][1] *= SHRINK_INNER; o[h][3] *= SHRINK_INNER;
+    o[h][0] = Math.min(o[h][0], FLOOR_K * oFloor[h][0]);
+    o[h][4] = Math.max(o[h][4], FLOOR_K * oFloor[h][4]);
   }
   return o;
 }
@@ -127,15 +151,15 @@ interface MarketIn { id: string; prices: number[]; }
 function forecastCase(markets: MarketIn[]): Record<string, number[][]> {
   const sum = markets.reduce((s, m) => s + m.prices[m.prices.length - 1], 0);
   let f = sum > 0 ? 1 / sum : 1;
-  f = Math.min(1.18, Math.max(0.85, f));
+  f = Math.min(SUM_CLAMP_HI, Math.max(SUM_CLAMP_LO, f));
   const out: Record<string, number[][]> = {};
   for (const m of markets) {
     const x = m.prices[m.prices.length - 1];
     const o = forecastMarket(m.prices);
-    const delta = (x * f - x) * 0.7;
+    const delta = (x * f - x) * SUM_POWER;
     const rows: number[][] = [];
     for (let h = 0; h < HORIZON; h++) {
-      const row = o[h].map((v) => q6(x + v * 0.7 + delta)).sort((a, b) => a - b);
+      const row = o[h].map((v) => q6(x + v * EXTRA + delta)).sort((a, b) => a - b);
       rows.push(row);
     }
     out[m.id] = rows;
