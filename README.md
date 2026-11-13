@@ -52,6 +52,7 @@ cases + 6 volatile launch-day cases) and the layers stack:
 | House baseline | 0.363589 | 2.060 | 0.7675 | 0.9496 |
 | **b2 (fallback, `main.ts`)** | **0.276910** | 2.358 | 0.7537 | 0.8258 |
 | **S2a (candidate, `main-s2a.ts`)** | **0.257627** | **2.254** | 0.7534 | 0.8665 |
+| **S2a+h30 (candidate, `main-s2a-h30.ts`)** | **0.256439** | **2.222** | 0.7474 | 0.8705 |
 
 S2a per-case: p00 0.3985, p01 0.2956, p02 0.3633, p03 0.2441,
 p04 0.1991, p05 0.1039. It improves every practice case vs b2 except
@@ -60,6 +61,17 @@ genuine-vs-overfitting test. Still 0.0076 short of the 0.250 top-10
 target. The remaining gap is a median problem: the median error is
 0.7534 in every candidate (27% of b2's loss) and no method tried
 (drift, anchor, bounce, trees, Kalman, copula) moved it.
+
+**S2a+h30**: S2a plus the `persist_med_h30` overlay — for h≤30, the
+median is the last price (persistence) and the whole band is shifted
+by the same delta; for h>30, S2a unchanged. No fitted parameters.
+Per-case: p00 0.4046, p01 0.2957, p02 0.3577, p03 0.2434, p04 0.1938,
+p05 0.1030. It helps 4/6 practice cases and 5/6 extra cases (hurts
+p00 +0.006). Two independent tracks found S2a's median is worse than
+persistence at h1–30, because at short horizons the price barely
+moves, so any median shift is pure error. The S3 program proved the
+median is unpredictable from the available information (see below),
+so S2a+h30 is the best verified model.
 
 - S2a TypeScript reproduces the Python prototype: practice 0.257627
   vs 0.257626, extra 2.254139 exact, per-case matching to 4 decimals.
@@ -78,9 +90,10 @@ and `nvidia-forecast/LEADERBOARD.md` for the full log.
 ## Run
 
 ```sh
-node main.ts       # b2 fallback: reads $MAKEFUN_INPUT_DIR (default /input),
-                   # writes $MAKEFUN_OUTPUT_DIR (default /output)
-node main-s2a.ts   # S2a candidate (same interface)
+node main.ts         # b2 fallback: reads $MAKEFUN_INPUT_DIR (default /input),
+                     # writes $MAKEFUN_OUTPUT_DIR (default /output)
+node main-s2a.ts     # S2a candidate (same interface)
+node main-s2a-h30.ts # S2a + persist_med_h30 overlay (same interface)
 ```
 
 Node 22, stdlib only. No network access needed at run time.
