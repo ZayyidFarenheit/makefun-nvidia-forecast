@@ -43,6 +43,7 @@ const SUM_CLAMP_LO = 0.85;
 const SUM_CLAMP_HI = 1.18;
 const STRIDE = 7;
 const WINSOR_Q = 0; // 0 = off; else clip h-step samples at this two-sided quantile (e.g. 0.01)
+const WINSOR_ABS = 0.1; // iter a3: clip h-step samples to [-T, +T] (0 = off)
 
 function q6(v: number): number {
   const c = Math.min(1, Math.max(0, v));
@@ -71,6 +72,9 @@ function rawOffsets(prices: number[], windowMin: number): number[][] {
       const d: number[] = [];
       for (let i = 0; i < n - h; i += STRIDE) d.push(p[i + h] - p[i]);
       d.sort((a, b) => a - b);
+      if (WINSOR_ABS > 0) {
+        for (let k = 0; k < d.length; k++) d[k] = Math.min(WINSOR_ABS, Math.max(-WINSOR_ABS, d[k]));
+      }
       if (WINSOR_Q > 0 && d.length >= 20) {
         const lo = quantile(d, WINSOR_Q);
         const hi = quantile(d, 1 - WINSOR_Q);
@@ -82,10 +86,8 @@ function rawOffsets(prices: number[], windowMin: number): number[][] {
       const d: number[] = [];
       for (let i = 0; i < n - h; i++) d.push(p[i + h] - p[i]);
       d.sort((a, b) => a - b);
-      if (WINSOR_Q > 0 && d.length >= 20) {
-        const lo = quantile(d, WINSOR_Q);
-        const hi = quantile(d, 1 - WINSOR_Q);
-        for (let k = 0; k < d.length; k++) d[k] = Math.min(hi, Math.max(lo, d[k]));
+      if (WINSOR_ABS > 0) {
+        for (let k = 0; k < d.length; k++) d[k] = Math.min(WINSOR_ABS, Math.max(-WINSOR_ABS, d[k]));
       }
       qs = TAU.map((t) => quantile(d, t));
       last = qs;
