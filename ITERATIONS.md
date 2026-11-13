@@ -19,3 +19,4 @@ asymmetric tails, logit model, momentum, EWMA.
 | a6 | core window 12h → 8h (winsorize ±0.10 tetap) | 0.408219 | 0.304776 | 0.396096 | 0.305812 | 0.196225 | 0.109230 | 0.276854 | 0.8318 | 0.7537 | TOLAK (mean membaik -0.0029 tapi p02 memburuk tajam +0.019 — melanggar aturan terima) — revert ke 12h |
 | a7 | core window 12h → 24h (winsorize ±0.10 tetap) | 0.424791 | 0.312885 | 0.388277 | 0.323164 | 0.209737 | 0.116286 | 0.286332 | 0.8402 | 0.7537 | TOLAK (mean +0.0066, 5/6 case memburuk) — revert ke 12h |
 | b1 | market kecil (x<0.02) offsets ×0.7 | 0.414486 | 0.313937 | 0.377409 | 0.309595 | 0.199372 | 0.112665 | 0.278284 | 0.8165 | 0.7537 | TERIMA (mean -0.0015, tidak ada case memburuk) |
+| b2 | market besar (x>=0.05) offsets ×1.15 | 0.405920 | 0.314291 | 0.372810 | 0.311667 | 0.197089 | 0.115777 | 0.276910 | 0.8258 | 0.7537 | TERIMA (mean -0.0014, p03 +0.002 / p05 +0.003, tidak tajam) |

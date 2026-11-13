@@ -46,6 +46,8 @@ const WINSOR_Q = 0; // 0 = off; else clip h-step samples at this two-sided quant
 const WINSOR_ABS = 0.1; // iter a3 accepted: clip h-step samples to [-0.10, +0.10]
 const SMALL_THR = 0.02; // iter b1: markets with last price below this are "small"
 const SMALL_K = 0.7; // iter b1: small markets' offsets x0.7 (pulled harder to last price)
+const LARGE_THR = 0.05; // iter b2: markets with last price at/above this are "large"
+const LARGE_K = 1.15; // iter b2: large markets' offsets x1.15 (looser)
 
 function q6(v: number): number {
   const c = Math.min(1, Math.max(0, v));
@@ -147,11 +149,16 @@ function forecastMarket(prices: number[]): number[][] {
     o[h][0] = Math.min(o[h][0], FLOOR_K * oFloor[h][0]);
     o[h][4] = Math.max(o[h][4], FLOOR_K * oFloor[h][4]);
   }
-  // (b) small/thin markets: pull harder to the last price (narrower bands)
+  // (b) small/thin markets: pull harder to the last price (narrower bands);
+  // large markets: looser (wider bands)
   const x = prices[prices.length - 1];
   if (x < SMALL_THR) {
     for (let h = 0; h < HORIZON; h++) {
       for (let j = 0; j < 5; j++) o[h][j] *= SMALL_K;
+    }
+  } else if (x >= LARGE_THR) {
+    for (let h = 0; h < HORIZON; h++) {
+      for (let j = 0; j < 5; j++) o[h][j] *= LARGE_K;
     }
   }
   return o;
